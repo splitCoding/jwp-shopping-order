@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 
 import cart.dao.MemberDao;
 import cart.domain.Member;
+import cart.dto.request.CartItemRequest;
 import cart.dto.request.OrderItemRequest;
 import cart.dto.request.OrderRequest;
 import cart.dto.request.ProductRequest;
@@ -13,6 +14,7 @@ import cart.dto.response.OrderResponse;
 import cart.dto.response.OrdersResponse;
 import io.restassured.response.ExtractableResponse;
 import io.restassured.response.Response;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +31,6 @@ public class OrderIntegrationTest extends IntegrationTest {
     private Long productId2;
     private Long productId3;
     private Member member1;
-    private Member member2;
     private OrderRequest orderRequest1;
     private OrderRequest orderRequest2;
 
@@ -42,25 +43,31 @@ public class OrderIntegrationTest extends IntegrationTest {
         productId3 = createProduct(new ProductRequest("셀러드", 20_000, "http://example.com/salad.jpg"));
 
         member1 = memberDao.getMemberById(1L);
-        member2 = memberDao.getMemberById(2L);
 
-        orderRequest1 = new OrderRequest(List.of(new OrderItemRequest(productId, 3), new OrderItemRequest(productId2,
-            3)));
-        orderRequest2 = new OrderRequest(List.of(new OrderItemRequest(productId2, 1), new OrderItemRequest(productId3,
-            5)));
+        orderRequest1 = new OrderRequest(
+            List.of(new OrderItemRequest(productId, 1), new OrderItemRequest(productId2, 1)),
+            LocalDateTime.of(2023, 4, 4, 4, 4)
+        );
+        orderRequest2 = new OrderRequest(
+            List.of(new OrderItemRequest(productId2, 1), new OrderItemRequest(productId3, 1)),
+            LocalDateTime.of(2023, 4, 4, 4, 4)
+        );
     }
 
     @DisplayName("장바구니에 담긴 상품을 주문하고 주문내역을 저장한다.")
     @Test
     public void saveOrder() {
         //given
+        createCartItem(member1, new CartItemRequest(productId));
+        createCartItem(member1, new CartItemRequest(productId2));
+
         //when
         final ExtractableResponse<Response> response = given().log().all()
             .contentType(MediaType.APPLICATION_JSON_VALUE)
             .auth().preemptive().basic(member1.getEmail(), member1.getPassword())
             .body(orderRequest1)
             .when()
-            .post("/cart-items/order")
+            .post("/orders")
             .then().log().all()
             .extract();
 
@@ -71,10 +78,10 @@ public class OrderIntegrationTest extends IntegrationTest {
             () -> assertThat(response.statusCode()).isEqualTo(HttpStatus.CREATED.value()),
             () -> assertThat(response.header("Location")).isNotNull(),
             () -> assertThat(orderResponse.getItems()).hasSize(2),
-            () -> assertThat(orderResponse.getProductPrice()).isEqualTo(75_000),
-            () -> assertThat(orderResponse.getDiscountPrice()).isEqualTo(5000),
+            () -> assertThat(orderResponse.getProductPrice()).isEqualTo(25_000),
+            () -> assertThat(orderResponse.getDiscountPrice()).isEqualTo(0),
             () -> assertThat(orderResponse.getDeliveryFee()).isEqualTo(3000),
-            () -> assertThat(orderResponse.getTotalPrice()).isEqualTo(73000)
+            () -> assertThat(orderResponse.getTotalPrice()).isEqualTo(28_000)
         );
     }
 
@@ -82,7 +89,7 @@ public class OrderIntegrationTest extends IntegrationTest {
     @Test
     public void findOrderById() {
         //given
-        final Long orderId = createOrder(orderRequest1);
+        final Long orderId = createOrder(member1, orderRequest1);
 
         //when
         final ExtractableResponse<Response> response = given().log().all()
@@ -99,10 +106,10 @@ public class OrderIntegrationTest extends IntegrationTest {
         assertAll(
             () -> assertThat(orderResponse.getOrderId()).isEqualTo(orderId),
             () -> assertThat(orderResponse.getItems()).hasSize(2),
-            () -> assertThat(orderResponse.getProductPrice()).isEqualTo(75_000),
-            () -> assertThat(orderResponse.getDiscountPrice()).isEqualTo(5000),
+            () -> assertThat(orderResponse.getProductPrice()).isEqualTo(25_000),
+            () -> assertThat(orderResponse.getDiscountPrice()).isEqualTo(0),
             () -> assertThat(orderResponse.getDeliveryFee()).isEqualTo(3000),
-            () -> assertThat(orderResponse.getTotalPrice()).isEqualTo(73000)
+            () -> assertThat(orderResponse.getTotalPrice()).isEqualTo(28_000)
         );
     }
 
@@ -110,8 +117,8 @@ public class OrderIntegrationTest extends IntegrationTest {
     @Test
     public void findOrders() {
         //given
-        createOrder(orderRequest1);
-        createOrder(orderRequest2);
+        createOrder(member1, orderRequest1);
+        createOrder(member1, orderRequest2);
 
         //when
         final ExtractableResponse<Response> response = given().log().all()
@@ -129,16 +136,16 @@ public class OrderIntegrationTest extends IntegrationTest {
             () -> assertThat(ordersResponse.getOrders()).hasSize(2),
 
             () -> assertThat(ordersResponse.getOrders().get(0).getItems()).hasSize(2),
-            () -> assertThat(ordersResponse.getOrders().get(0).getProductPrice()).isEqualTo(75_000),
-            () -> assertThat(ordersResponse.getOrders().get(0).getDiscountPrice()).isEqualTo(5000),
+            () -> assertThat(ordersResponse.getOrders().get(0).getProductPrice()).isEqualTo(25_000),
+            () -> assertThat(ordersResponse.getOrders().get(0).getDiscountPrice()).isEqualTo(0),
             () -> assertThat(ordersResponse.getOrders().get(0).getDeliveryFee()).isEqualTo(3000),
-            () -> assertThat(ordersResponse.getOrders().get(0).getTotalPrice()).isEqualTo(73000),
+            () -> assertThat(ordersResponse.getOrders().get(0).getTotalPrice()).isEqualTo(28_000),
 
             () -> assertThat(ordersResponse.getOrders().get(1).getItems()).hasSize(2),
-            () -> assertThat(ordersResponse.getOrders().get(1).getProductPrice()).isEqualTo(115_000),
-            () -> assertThat(ordersResponse.getOrders().get(1).getDiscountPrice()).isEqualTo(5000),
+            () -> assertThat(ordersResponse.getOrders().get(1).getProductPrice()).isEqualTo(35_000),
+            () -> assertThat(ordersResponse.getOrders().get(1).getDiscountPrice()).isEqualTo(3000),
             () -> assertThat(ordersResponse.getOrders().get(1).getDeliveryFee()).isEqualTo(3000),
-            () -> assertThat(ordersResponse.getOrders().get(1).getTotalPrice()).isEqualTo(113_000)
+            () -> assertThat(ordersResponse.getOrders().get(1).getTotalPrice()).isEqualTo(35_000)
         );
     }
 
@@ -155,17 +162,36 @@ public class OrderIntegrationTest extends IntegrationTest {
         return getIdFromCreatedResponse(response);
     }
 
+    private Long createCartItem(Member member, CartItemRequest cartItemRequest) {
+        ExtractableResponse<Response> response = given()
+            .contentType(MediaType.APPLICATION_JSON_VALUE)
+            .auth().preemptive().basic(member.getEmail(), member.getPassword())
+            .body(cartItemRequest)
+            .when()
+            .post("/cart-items")
+            .then()
+            .statusCode(HttpStatus.CREATED.value())
+            .extract();
+
+        return getIdFromCreatedResponse(response);
+    }
+
     private long getIdFromCreatedResponse(ExtractableResponse<Response> response) {
         return Long.parseLong(response.header("Location").split("/")[2]);
     }
 
-    public Long createOrder(OrderRequest orderRequest) {
+    public Long createOrder(Member member, OrderRequest orderRequest) {
+        orderRequest.getOrderItems()
+            .stream()
+            .map(OrderItemRequest::getId)
+            .forEach((productId) -> createCartItem(member, new CartItemRequest(productId)));
+
         final ExtractableResponse<Response> response = given().log().all()
             .contentType(MediaType.APPLICATION_JSON_VALUE)
-            .auth().preemptive().basic(member1.getEmail(), member1.getPassword())
+            .auth().preemptive().basic(member.getEmail(), member.getPassword())
             .body(orderRequest)
             .when()
-            .post("/cart-items/order")
+            .post("/orders")
             .then()
             .statusCode(HttpStatus.CREATED.value())
             .extract();
